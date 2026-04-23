@@ -61,11 +61,31 @@ INTERFACE yif_aai_telegram
 
   CONSTANTS mc_base_url TYPE string VALUE 'https://api.telegram.org' ##NO_TEXT.
 
-  METHODS get_updates.
+  DATA: m_bot_name    TYPE yaai_telegram_b-name READ-ONLY,
+        m_aai_chat_id TYPE yde_aai_chat_id READ-ONLY.
+
+  METHODS get_updates
+    RETURNING VALUE(r_messages) TYPE string.
 
   METHODS send_message
     IMPORTING
               i_message         TYPE csequence
     RETURNING VALUE(r_response) TYPE string.
+
+  METHODS register_bot
+    IMPORTING
+              i_name           TYPE yde_aai_telegram_bot_name
+              i_user           TYPE usnam
+              i_description    TYPE yde_aai_telegram_bot_descr
+              i_token          TYPE yde_aai_telegram_bot_token
+              i_chat_id        TYPE yde_aai_telegram_chat_id
+              i_agent_id       TYPE yde_aai_agent_id
+    RETURNING VALUE(r_success) TYPE abap_bool.
+
+  METHODS set_aai_chat_id
+    IMPORTING
+              i_chat_id        TYPE yde_aai_chat_id
+    RETURNING VALUE(r_success) TYPE abap_bool.
+
 
 ENDINTERFACE.
