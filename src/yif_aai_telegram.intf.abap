@@ -61,8 +61,10 @@ INTERFACE yif_aai_telegram
 
   CONSTANTS mc_base_url TYPE string VALUE 'https://api.telegram.org' ##NO_TEXT.
 
-  DATA: m_bot_name    TYPE yaai_telegram_b-name READ-ONLY,
-        m_aai_chat_id TYPE yde_aai_chat_id READ-ONLY.
+  DATA: m_bot_name     TYPE yaai_telegram_b-bot_name READ-ONLY,
+        m_aai_agent_id TYPE yde_aai_agent_id READ-ONLY,
+        m_aai_chat_id  TYPE yde_aai_chat_id READ-ONLY,
+        m_aai_api      TYPE yde_aai_api READ-ONLY.
 
   METHODS get_updates
     RETURNING VALUE(r_messages) TYPE string.

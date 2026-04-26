@@ -8,7 +8,9 @@ CLASS ycl_aai_telegram DEFINITION
     INTERFACES yif_aai_telegram.
 
     ALIASES m_bot_name FOR yif_aai_telegram~m_bot_name.
+    ALIASES m_aai_agent_id FOR yif_aai_telegram~m_aai_agent_id.
     ALIASES m_aai_chat_id FOR yif_aai_telegram~m_aai_chat_id.
+    ALIASES m_aai_api FOR yif_aai_telegram~m_aai_api.
 
     ALIASES send_message FOR yif_aai_telegram~send_message.
     ALIASES get_updates FOR yif_aai_telegram~get_updates.
@@ -17,11 +19,11 @@ CLASS ycl_aai_telegram DEFINITION
 
     METHODS constructor
       IMPORTING
-        i_bot_name TYPE yaai_telegram_b-name OPTIONAL.
+        i_bot_name TYPE yaai_telegram_b-bot_name OPTIONAL.
 
     METHODS set_bot_name
       IMPORTING
-        i_bot_name TYPE yaai_telegram_b-name.
+        i_bot_name TYPE yaai_telegram_b-bot_name.
 
 
   PROTECTED SECTION.
@@ -45,8 +47,7 @@ CLASS ycl_aai_telegram DEFINITION
     METHODS _get_chat_id
       RETURNING VALUE(r_chat_id) TYPE string.
 
-    METHODS _get_aai_chat_id
-      RETURNING VALUE(r_aai_chat_id) TYPE yde_aai_chat_id.
+    METHODS _load_aai_settings.
 
 ENDCLASS.
 
@@ -58,7 +59,7 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
 
     me->m_bot_name = i_bot_name.
 
-    me->_get_aai_chat_id( ).
+    me->_load_aai_settings( ).
 
   ENDMETHOD.
 
@@ -179,7 +180,7 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
 
     SELECT SINGLE token
       FROM yaai_telegram_b
-      WHERE name = @me->m_bot_name
+      WHERE bot_name = @me->m_bot_name
         AND username = @sy-uname
         INTO @r_token.
 
@@ -191,29 +192,28 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
 
     SELECT SINGLE chat_id
       FROM yaai_telegram_b
-      WHERE name = @me->m_bot_name
+      WHERE bot_name = @me->m_bot_name
         AND username = @sy-uname
         INTO @r_chat_id.
 
   ENDMETHOD.
 
-  METHOD _get_aai_chat_id.
-
-    CLEAR r_aai_chat_id.
+  METHOD _load_aai_settings.
 
     IF me->m_bot_name IS INITIAL.
       RETURN.
     ENDIF.
 
+    SELECT SINGLE agent_id, api
+      FROM yaai_telegram_b
+      WHERE bot_name = @me->m_bot_name
+        INTO ( @me->m_aai_agent_id, @me->m_aai_api ).
+
     SELECT SINGLE chat_id
       FROM yaai_telegram_c
-      WHERE name = @me->m_bot_name
+      WHERE bot_name = @me->m_bot_name
         AND username = @sy-uname
        INTO @me->m_aai_chat_id.
-
-    IF r_aai_chat_id IS REQUESTED.
-      r_aai_chat_id = me->m_aai_chat_id.
-    ENDIF.
 
   ENDMETHOD.
 
@@ -224,7 +224,9 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
     DATA: l_url     TYPE string,
           l_token   TYPE string,
           l_chat_id TYPE string,
-          l_json    TYPE string.
+          l_json    TYPE string,
+          l_index   TYPE i,
+          l_start   TYPE abap_bool.
 
     CLEAR r_messages.
 
@@ -246,37 +248,54 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
 
     SELECT MAX( message_id )
       FROM yaai_telegram_m
-      WHERE name = @me->m_bot_name
+      WHERE bot_name = @me->m_bot_name
         AND username = @sy-uname
         INTO @DATA(l_last_message_id).
 
+    l_index = 1.
+
     LOOP AT ls_response-result ASSIGNING FIELD-SYMBOL(<ls_result>).
+
+      DATA(l_tabix) = sy-tabix.
 
       " Already processed?
       IF <ls_result>-message-message_id <= l_last_message_id.
+        l_index = l_tabix.
         CONTINUE.
       ENDIF.
 
-      " Bot command
+      " Bot start command
       IF <ls_result>-message-text = '/start'.
+        l_index = l_tabix.
+        l_start = abap_true.
+        CONTINUE.
+      ENDIF.
 
-        DELETE FROM yaai_telegram_m
-          WHERE name = @me->m_bot_name
+    ENDLOOP.
+
+    IF l_start = abap_true.
+
+      DELETE FROM yaai_telegram_m
+          WHERE bot_name = @me->m_bot_name
             AND username = @sy-uname
             AND message_id <= @<ls_result>-message-message_id.
 
-        UPDATE yaai_telegram_c
-           SET chat_id = @space
-         WHERE name = @me->m_bot_name
-           AND username = @sy-uname.
+      MODIFY yaai_telegram_c FROM @( VALUE #( bot_name = me->m_bot_name
+                                              username = sy-uname
+                                              chat_id = space ) ).
 
-        CLEAR me->m_aai_chat_id.
+      CLEAR me->m_aai_chat_id.
 
+    ENDIF.
+
+    LOOP AT ls_response-result ASSIGNING <ls_result> FROM l_index.
+
+      " Bot start command
+      IF <ls_result>-message-text = '/start'.
         CONTINUE.
-
       ENDIF.
 
-      INSERT yaai_telegram_m FROM @( VALUE #( name = me->m_bot_name
+      INSERT yaai_telegram_m FROM @( VALUE #( bot_name = me->m_bot_name
                                               username = sy-uname
                                               message_id = <ls_result>-message-message_id
                                               message_text = <ls_result>-message-text ) ).
@@ -295,7 +314,7 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
 
     CLEAR r_success.
 
-    INSERT yaai_telegram_b FROM @( VALUE #( name = i_name
+    INSERT yaai_telegram_b FROM @( VALUE #( bot_name = i_name
                                             username = i_user
                                             description = i_description
                                             token = i_token
@@ -316,18 +335,13 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    UPDATE yaai_telegram_c
-       SET chat_id = @i_chat_id
-     WHERE name = @me->m_bot_name
-       AND username = @sy-uname.
+    me->m_aai_chat_id = i_chat_id.
 
-    IF sy-subrc = 0.
+    MODIFY yaai_telegram_c FROM @( VALUE #( bot_name = me->m_bot_name
+                                            username = sy-uname
+                                            chat_id = i_chat_id ) ).
 
-      me->m_aai_chat_id = i_chat_id.
-
-      r_success = abap_true.
-
-    ENDIF.
+    r_success = abap_true.
 
   ENDMETHOD.
 

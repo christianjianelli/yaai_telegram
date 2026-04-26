@@ -9,52 +9,45 @@ PARAMETERS botname TYPE yde_aai_telegram_bot_name.
 
 START-OF-SELECTION.
 
+  DATA: task_id   TYPE yaai_async-id,
+        task_name TYPE yaai_async-name.
+
   DATA(o_aai_telegram) = NEW ycl_aai_telegram( botname ).
 
   DATA(messages) = o_aai_telegram->get_updates( ).
 
   IF messages IS NOT INITIAL.
 
-    DATA(lo_persistence) = NEW ycl_aai_db(
-      i_api = yif_aai_const=>c_openai
-      i_id = o_aai_telegram->m_aai_chat_id
-    ).
+    DATA(lo_aai_async) = NEW ycl_aai_async( ).
 
-    IF o_aai_telegram->m_aai_chat_id IS INITIAL.
+    CASE o_aai_telegram->m_aai_api.
 
-      o_aai_telegram->set_aai_chat_id( i_chat_id = lo_persistence->m_id ).
+      WHEN yif_aai_const=>c_openai.
 
-    ENDIF.
+        IF o_aai_telegram->m_aai_chat_id IS INITIAL.
 
-    DATA(lo_aai_openai) = NEW ycl_aai_openai(
-*      i_api                 =
-*      i_model               =
-*      i_use_completions     = abap_false
-*      i_parallel_tool_calls = abap_true
-*      i_safety_identifier   =
-*      i_t_history           =
-*      i_o_prompt            =
-*      i_o_connection        =
-       i_o_persistence       = lo_persistence
-*      i_o_agent             =
-    ).
+          o_aai_telegram->set_aai_chat_id( i_chat_id = NEW ycl_aai_db( i_api = yif_aai_const=>c_openai )->m_id ).
 
-    lo_aai_openai->chat(
-      EXPORTING
-*        id              =
-        i_message       = messages
-*        i_new           = abap_false
-*        i_greeting      =
-*        i_async_task_id =
-*        i_o_prompt      =
-*        i_o_agent       =
-      IMPORTING
-*        e_id            =
-        e_response      = DATA(l_response)
-*        e_failed        =
-*        e_t_response    =
-    ).
+        ENDIF.
 
-    o_aai_telegram->send_message( i_message = l_response ).
+        task_name = |Telegram bot { botname }|.
+
+        task_id = lo_aai_async->create(
+          EXPORTING
+            i_chat_id   = o_aai_telegram->m_aai_chat_id
+            i_task_name = task_name
+        ).
+
+        DATA(response) = NEW ycl_aai_async_chat_openai( )->run(
+          EXPORTING
+            i_task_id  = task_id
+            i_chat_id  = o_aai_telegram->m_aai_chat_id
+            i_message  = messages
+            i_agent_id = o_aai_telegram->m_aai_agent_id
+        ).
+
+    ENDCASE.
+
+    o_aai_telegram->send_message( i_message = response ).
 
   ENDIF.
