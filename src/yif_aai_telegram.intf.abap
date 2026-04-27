@@ -71,8 +71,8 @@ INTERFACE yif_aai_telegram
 
   METHODS send_message
     IMPORTING
-              i_message         TYPE csequence
-    RETURNING VALUE(r_response) TYPE string.
+              i_message        TYPE csequence
+    RETURNING VALUE(r_success) TYPE string.
 
   METHODS register_bot
     IMPORTING
@@ -89,5 +89,6 @@ INTERFACE yif_aai_telegram
               i_chat_id        TYPE yde_aai_chat_id
     RETURNING VALUE(r_success) TYPE abap_bool.
 
+  METHODS set_messages_as_processed.
 
 ENDINTERFACE.

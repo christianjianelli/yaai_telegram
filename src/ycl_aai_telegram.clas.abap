@@ -16,6 +16,7 @@ CLASS ycl_aai_telegram DEFINITION
     ALIASES get_updates FOR yif_aai_telegram~get_updates.
     ALIASES register_bot FOR yif_aai_telegram~register_bot.
     ALIASES set_aai_chat_id FOR yif_aai_telegram~set_aai_chat_id.
+    ALIASES set_messages_as_processed FOR yif_aai_telegram~set_messages_as_processed.
 
     METHODS constructor
       IMPORTING
@@ -78,7 +79,7 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
           l_chat_id TYPE string,
           l_json    TYPE string.
 
-    CLEAR r_response.
+    r_success = abap_false.
 
     l_token = me->_get_token( ).
 
@@ -107,7 +108,9 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
         e_data = ls_response
     ).
 
-    r_response = ls_response-result-text.
+    IF ls_response-result-text IS NOT INITIAL.
+      r_success = abap_true.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -250,6 +253,7 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
       FROM yaai_telegram_m
       WHERE bot_name = @me->m_bot_name
         AND username = @sy-uname
+        AND processed = @abap_true
         INTO @DATA(l_last_message_id).
 
     l_index = 1.
@@ -289,6 +293,11 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
     ENDIF.
 
     LOOP AT ls_response-result ASSIGNING <ls_result> FROM l_index.
+
+      " Already processed?
+      IF <ls_result>-message-message_id <= l_last_message_id.
+        CONTINUE.
+      ENDIF.
 
       " Bot start command
       IF <ls_result>-message-text = '/start'.
@@ -342,6 +351,16 @@ CLASS ycl_aai_telegram IMPLEMENTATION.
                                             chat_id = i_chat_id ) ).
 
     r_success = abap_true.
+
+  ENDMETHOD.
+
+  METHOD yif_aai_telegram~set_messages_as_processed.
+
+    UPDATE yaai_telegram_m
+      SET processed = @abap_true
+      WHERE bot_name = @me->m_bot_name
+        AND username = @sy-uname
+        AND processed = @abap_false.
 
   ENDMETHOD.
 
